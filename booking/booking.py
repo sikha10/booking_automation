@@ -4,13 +4,15 @@ from selenium import webdriver
 from booking.booking_filtration import Bookingfiltration
 from booking.booking_report import BookingReport
 from prettytable import PrettyTable
+from webdriver_manager.chrome import ChromeDriverManager
+from time import sleep
 
-
+# sometimes it opens another verion of booking.com 
 class Booking(webdriver.Chrome):
-    def __init__(self, driver_path=r"D:\selenium chromedriver\chromedriver.exe", teardown=False):
-        self.driver_path = driver_path
+    def __init__(self, options, teardown=False):
         self.teardown = teardown
-        super(Booking, self).__init__()
+        super(Booking, self).__init__(options=options)
+        self.set_window_position(2000, 0)
         self.implicitly_wait(10)
         self.maximize_window()
 
@@ -22,43 +24,59 @@ class Booking(webdriver.Chrome):
         self.get(const.BASE_URL)
 
     def change_currency(self, currency=None):
-        currency_element = self.find_element(By.CSS_SELECTOR,
-                          'button[data-tooltip-text="Choose your currency"]'
+        try:
+            currency_element = self.find_element(By.CSS_SELECTOR, 'button[data-testid="header-currency-picker-trigger"]')
+        except: 
+            currency_element = self.find_element(By.CSS_SELECTOR,
+                          'button[data-modal-aria-label="Select your currency"]'
                           )
+
         currency_element.click()
-        selected_currency_element = self.find_element(By.CSS_SELECTOR,
-                                                      f'a[data-modal-header-async-url-param="changed_currency=1&selected_currency={currency}&top_currency=1"]'
+        try:
+            selected_currency_element = self.find_elements(By.CSS_SELECTOR,
+                                                      'div[class=" b284c0e8fc"]'
                                                       )
-        selected_currency_element.click()
+        except:
+            selected_currency_element = self.find_elements(By.CSS_SELECTOR, 'div[class="bui-traveller-header__currency"]')
+        for currencyElem in selected_currency_element:
+            try:
+                if currencyElem.get_attribute("innerHTML") == currency:
+                    currencyElem.click()
+            except:
+                pass
 
     def select_place_to_go(self, place_go):
-        search_field = self.find_element(By.ID, "ss")
+        try:
+            search_field = self.find_element(By.ID, ":rh:")
+        except:
+            search_field = self.find_element(By.CLASS_NAME, "ada65db9b5")
         search_field.clear()
         search_field.send_keys(place_go)
-
-        first_result = self.find_element(By.CSS_SELECTOR, 'li[data-i="0"]')
+        sleep(1)
+        first_result = self.find_element(By.ID, 'autocomplete-result-0')
         first_result.click()
 
     def select_dates(self, check_in, check_out):
-        check_in_element = self.find_element(By.CSS_SELECTOR, f'td[data-date="{check_in}"]')
+        check_in_element = self.find_element(By.CSS_SELECTOR, f'span[data-date="{check_in}"]')
         check_in_element.click()
 
-        check_out_element = self.find_element(By.CSS_SELECTOR, f'td[data-date="{check_out}"]')
+        check_out_element = self.find_element(By.CSS_SELECTOR, f'span[data-date="{check_out}"]')
         check_out_element.click()
 
     def select_people(self, count=1):
-        selection_element = self.find_element(By.ID, "xp__guests__toggle")
+        selection_element = self.find_element(By.CSS_SELECTOR, 'button[data-testid="occupancy-config"]')
         selection_element.click()
 
         while True:
-            decrease_adults_element = self.find_element(By.CSS_SELECTOR, 'button[aria-label="Decrease number of Adults"]')
+            decrease_adults_element = self.find_elements(By.CSS_SELECTOR, 'span[class="d71f792240"]')[1]
             decrease_adults_element.click()
-
-            adults_value_element = self.find_element(By.ID, "group_adults")
-            adults_value = adults_value_element.get_attribute('value')  # it gives me adults count
+            adults_value_element = self.find_element(By.CSS_SELECTOR, 'span[class="fb7047f72a"]')
+            adults_value = adults_value_element.get_attribute("innerHTML")  # it gives me adults count
+            print(adults_value)
             if int(adults_value) == 1:
-                break
-        increase_button_element = self.find_element(By.CSS_SELECTOR, 'button[aria-label="Increase number of Adults"]')
+                break 
+
+        increase_button_element = self.find_element(By.CSS_SELECTOR, 'button[class="dba1b3bddf e99c25fd33 aabf155f9a f42ee7b31a a86bcdb87f e137a4dfeb d1821e6945"]')
 
         for _ in range(count - 1):
             increase_button_element.click()
@@ -67,14 +85,16 @@ class Booking(webdriver.Chrome):
         search_button = self.find_element(By.CSS_SELECTOR, 'button[type="submit"]')
         search_button.click()
 
-    def apply_filtration(self):
+    def apply_filtration(self, rating: str):
+        rating_list = rating.replace(" ", "").split(',')
+        
         filtration = Bookingfiltration(driver=self)
-        filtration.apply_star_rating(4, 5)
+        filtration.apply_star_rating(tuple(rating_list))
         filtration.sort_price_lowest_first()
 
     def report_results(self):
         hotel_boxes = self.find_element(
-            By.ID, "search_results_table"
+            By.CSS_SELECTOR, 'div[class="f9958fb57b"]'
         )
 
         report = BookingReport(hotel_boxes)
